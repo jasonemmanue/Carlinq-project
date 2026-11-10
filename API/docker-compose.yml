@@ -42,6 +42,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       TEST_REDIS_URL: redis://redis:6379/1
       SEED_DEMO_DATA: "true"
+      PAYMENTS_SIMULATED: "true"
     ports: ["8010:8000"]
     depends_on:
       db:

@@ -54,6 +54,9 @@ et définir le *Root Directory* du service (`API` / `Backoffice`) dans le tablea
 
 ## Points d'attention
 
+- Fichiers envoyés (documents chauffeur, photos de messagerie) : volume Railway du service `api`, monté sur `/data`
+  (`railway service link api`, puis `railway volume add --mount-path /data`). Sans volume, l'envoi renvoie 503. Avec un volume, garder
+  1 seule réplique ; ne jamais supprimer ce volume.
 - `SEED_DEMO_DATA=true` par défaut : comptes de démo (mot de passe commun connu, voir `API/app/seed.py`).
   Environnement de **test uniquement** ; passer à `false` et changer le mot de passe admin avant toute ouverture réelle.
 - Les tests pytest ne tournent pas sur Railway (base `carlinq_test` inexistante) : rester sur Docker Compose en local.

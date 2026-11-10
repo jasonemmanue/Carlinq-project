@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_driver, current_user, passenger_only
 from app.core.errors import Conflict, Invalid
 from app.db.session import get_db
-from app.models import Driver, Ride, RideMessage, RideStatus, User, UserRole
+from app.models import Driver, Ride, RideMessage, RideStatus, User
 from app.schemas import (
     AcceptIn, CancelIn, CompleteIn, EstimateIn, EstimateOut, GpsIn, MessageIn, MessageOut,
     PauseOut, PauseStartIn, RateIn, RideCreateIn, RideOut, StopOut, TrafficOut, TrafficStartIn,
 )
 from app.services import pricing
 from app.services import rides as svc
+from app.services import storage
 from app.services.notify import notify
 from app.services.settings import get_pricing
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/rides", tags=["rides"])
 
 @router.post("/estimate", response_model=EstimateOut, summary="Devis (arrets, classe, route degradee)")
 def estimate(payload: EstimateIn, _: User = Depends(current_user), db: Session = Depends(get_db)):
+    svc.assert_class_for_mode(payload.mode, payload.service_class)
     pts = pricing.route_points((payload.pickup.lat, payload.pickup.lng),
                                [(s.lat, s.lng) for s in payload.stops],
                                (payload.destination.lat, payload.destination.lng))
@@ -39,7 +41,7 @@ def create(payload: RideCreateIn, user: User = Depends(passenger_only), db: Sess
 
 
 @router.get("", response_model=list[RideOut], summary="Mes courses (passager ou chauffeur)")
-def my_rides(status: RideStatus | None = None, limit: int = 30, user: User = Depends(current_user),
+def my_rides(status: RideStatus | None = None, limit: int = Query(30, ge=1, le=100), user: User = Depends(current_user),
              db: Session = Depends(get_db)):
     clauses = [Ride.passenger_id == user.id]
     if user.driver:
@@ -47,13 +49,13 @@ def my_rides(status: RideStatus | None = None, limit: int = 30, user: User = Dep
     stmt = select(Ride).where(or_(*clauses))
     if status:
         stmt = stmt.where(Ride.status == status)
-    return db.execute(stmt.order_by(Ride.id.desc()).limit(min(limit, 100))).scalars().all()
+    return db.execute(stmt.order_by(Ride.id.desc()).limit(limit)).scalars().all()
 
 
 @router.get("/offers", response_model=list[RideOut], summary="Commandes disponibles (chauffeur)")
 def offers(driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
     svc.assert_can_drive(db, driver)
-    return svc.offers_for(db, driver)
+    return svc.offers_for(db, driver) if driver.online else []
 
 
 @router.get("/{ride_id}", response_model=RideOut)
@@ -167,13 +169,30 @@ def send_message(ride_id: int, payload: MessageIn, user: User = Depends(current_
                  db: Session = Depends(get_db)):
     if not payload.text and not payload.photo_url:
         raise Invalid("MESSAGE_EMPTY", "Message vide")
+    return _post_message(db, _chat_ride(db, ride_id, user), user, payload.text, payload.photo_url)
+
+
+def _chat_ride(db: Session, ride_id: int, user: User) -> Ride:
     ride = svc.get_ride(db, ride_id)
     svc.assert_participant(ride, user)
-    if ride.status in (RideStatus.cancelled,) or (ride.driver_id is None and user.role != UserRole.admin):
+    if ride.status == RideStatus.cancelled or ride.driver_id is None:
         raise Conflict("CHAT_UNAVAILABLE", "Messagerie disponible une fois un chauffeur assigne")
-    msg = RideMessage(ride_id=ride.id, sender_id=user.id, text=payload.text, photo_url=payload.photo_url)
+    return ride
+
+
+def _post_message(db: Session, ride: Ride, user: User, text: str | None, photo_url: str | None) -> RideMessage:
+    msg = RideMessage(ride_id=ride.id, sender_id=user.id, text=text, photo_url=photo_url)
     db.add(msg)
     recipient = ride.passenger_id if user.id != ride.passenger_id else db.get(Driver, ride.driver_id).user_id
-    notify(db, recipient, "ride_message", user.full_name, payload.text or "Photo", ride_id=ride.id)
+    notify(db, recipient, "ride_message", user.full_name, text or "Photo", ride_id=ride.id)
     db.commit()
     return msg
+
+
+@router.post("/{ride_id}/messages/photo", response_model=MessageOut, status_code=201,
+             summary="Envoyer une photo (JPEG, PNG ou WebP, 8 Mo maximum)")
+def send_photo(ride_id: int, file: UploadFile = File(...), user: User = Depends(current_user),
+               db: Session = Depends(get_db)):
+    ride = _chat_ride(db, ride_id, user)
+    key = storage.save("messages", ride.id, file, allow_pdf=False)
+    return _post_message(db, ride, user, None, storage.url_for(key))

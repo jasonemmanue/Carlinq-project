@@ -57,7 +57,7 @@ void main() {
             // Chauffeur de demo (Prisca, Flexible Eco) : acceptation et fin de course.
             final driver = ApiClient();
             final t = await driver.post('/auth/login',
-                {'phone': '+237670000002', 'password': 'Carlinq2026!'});
+                {'phone': '+237670000002', 'password': const String.fromEnvironment('CARLINQ_TEST_PASSWORD')});
             driver.setTokens(
                 t['access_token'] as String, t['refresh_token'] as String);
             await driver

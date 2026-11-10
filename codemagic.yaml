@@ -1,0 +1,141 @@
+# Carlinq - iOS sur Codemagic (meme organisation que Prepaxia).
+#
+#   Branche           Workflows                                Compte Apple
+#   ios/build-check   passager/chauffeur-build-check           non
+#   ios/testflight    passager/chauffeur-testflight            oui
+#
+# Deux apps distinctes : chaque workflow travaille dans son dossier.
+# Mise en place Apple et Codemagic : deploy/TESTFLIGHT.md.
+# L'URL de l'API n'est jamais passee au build : elle est chiffree dans l'app.
+
+definitions:
+  environnement: &environnement
+    flutter: 3.38.4
+    xcode: latest
+    cocoapods: default
+
+  declenchement_check: &declenchement_check
+    events:
+      - push
+    branch_patterns:
+      - pattern: ios/build-check
+        include: true
+    cancel_previous_builds: true
+
+  declenchement_testflight: &declenchement_testflight
+    events:
+      - push
+    branch_patterns:
+      - pattern: ios/testflight
+        include: true
+    cancel_previous_builds: true
+
+  scripts:
+    - &pub_get
+      name: Dependances Flutter
+      script: flutter pub get
+    - &analyse
+      name: Analyse statique
+      script: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+    - &tests
+      name: Tests
+      script: flutter test
+    - &pods
+      name: CocoaPods
+      script: |
+        cd ios
+        pod install --repo-update
+    - &build_check
+      name: Build iOS sans signature
+      script: flutter build ios --release --no-codesign --obfuscate --split-debug-info=build/symboles
+    - &profils
+      name: Profils de signature
+      script: xcode-project use-profiles
+    - &build_ipa
+      name: Build IPA
+      # Numero de build = dernier build TestFlight + 1 ; l'app est retrouvee par son bundle.
+      script: |
+        set -e
+        APP_ID=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+          | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])')
+        DERNIER=$(app-store-connect get-latest-testflight-build-number "$APP_ID" || echo 0)
+        flutter build ipa --release \
+          --build-number=$((DERNIER + 1)) \
+          --export-options-plist=/Users/builder/export_options.plist \
+          --obfuscate --split-debug-info=build/symboles
+
+  artefacts_check: &artefacts_check
+    - build/ios/iphoneos/Runner.app
+    - /tmp/xcodebuild_logs/*.log
+
+  artefacts_testflight: &artefacts_testflight
+    - build/ios/ipa/*.ipa
+    - build/symboles/**
+    - /tmp/xcodebuild_logs/*.log
+    - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+  publication: &publication
+    app_store_connect:
+      auth: integration
+      submit_to_testflight: false
+
+workflows:
+  passager-build-check:
+    name: Passager - iOS build check
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    working_directory: Application/passager
+    environment:
+      <<: *environnement
+    triggering: *declenchement_check
+    scripts: [*pub_get, *analyse, *tests, *pods, *build_check]
+    artifacts: *artefacts_check
+
+  chauffeur-build-check:
+    name: Chauffeur - iOS build check
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    working_directory: Application/chauffeur
+    environment:
+      <<: *environnement
+    triggering: *declenchement_check
+    scripts: [*pub_get, *analyse, *tests, *pods, *build_check]
+    artifacts: *artefacts_check
+
+  passager-testflight:
+    name: Passager - TestFlight
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    working_directory: Application/passager
+    integrations:
+      app_store_connect: Prepaxia ASC
+    environment:
+      <<: *environnement
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.carlinq.passager
+      vars:
+        BUNDLE_ID: com.carlinq.passager
+    triggering: *declenchement_testflight
+    scripts: [*pub_get, *analyse, *tests, *pods, *profils, *build_ipa]
+    artifacts: *artefacts_testflight
+    publishing: *publication
+
+  chauffeur-testflight:
+    name: Chauffeur - TestFlight
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    working_directory: Application/chauffeur
+    integrations:
+      app_store_connect: Prepaxia ASC
+    environment:
+      <<: *environnement
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.carlinq.chauffeur
+      vars:
+        BUNDLE_ID: com.carlinq.chauffeur
+    triggering: *declenchement_testflight
+    scripts: [*pub_get, *analyse, *tests, *pods, *profils, *build_ipa]
+    artifacts: *artefacts_testflight
+    publishing: *publication

@@ -1,0 +1,131 @@
+name: Build check
+
+# Aucun lancement sur simple push : uniquement manuel ou sur une pull request.
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.38.4"
+
+jobs:
+  api:
+    name: API (pytest)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: carlinq
+          POSTGRES_PASSWORD: carlinq
+          POSTGRES_DB: carlinq_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U carlinq -d carlinq_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg2://carlinq:carlinq@localhost:5432/carlinq_test
+      TEST_DATABASE_URL: postgresql+psycopg2://carlinq:carlinq@localhost:5432/carlinq_test
+      REDIS_URL: redis://localhost:6379/1
+      TEST_REDIS_URL: redis://localhost:6379/1
+    defaults:
+      run:
+        working-directory: API
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: API/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  backoffice:
+    name: Backoffice (build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backoffice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Backoffice/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  android:
+    name: Android (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passager, chauffeur]
+    defaults:
+      run:
+        working-directory: Application/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+      - run: flutter test
+      - run: flutter build apk --release --obfuscate --split-debug-info=build/symboles
+      - name: Aucune URL d'API en clair dans l'APK
+        run: |
+          unzip -o -q build/app/outputs/flutter-apk/app-release.apk -d build/apk_check
+          if grep -rl "up.railway.app" build/apk_check; then
+            echo "URL de l'API trouvee en clair"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carlinq-${{ matrix.app }}-apk
+          path: Application/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
+  ios:
+    name: iOS sans signature (${{ matrix.app }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [passager, chauffeur]
+    defaults:
+      run:
+        working-directory: Application/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze lib --no-fatal-infos --no-fatal-warnings
+      - name: CocoaPods
+        working-directory: Application/${{ matrix.app }}/ios
+        run: pod install --repo-update
+      - run: flutter build ios --release --no-codesign --obfuscate --split-debug-info=build/symboles

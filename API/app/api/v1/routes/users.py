@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user
@@ -28,10 +28,15 @@ def update_me(payload: UserUpdateIn, user: User = Depends(current_user), db: Ses
 @router.delete("/me", status_code=204, summary="Suppression du compte (anonymisation)")
 def delete_me(user: User = Depends(current_user), db: Session = Depends(get_db)):
     active = (RideStatus.pending, RideStatus.accepted, RideStatus.in_progress)
-    if db.execute(select(Ride.id).where(Ride.passenger_id == user.id, Ride.status.in_(active))).first():
+    clauses = [Ride.passenger_id == user.id]
+    if user.driver:
+        clauses.append(Ride.driver_id == user.driver.id)
+    if db.execute(select(Ride.id).where(or_(*clauses), Ride.status.in_(active))).first():
         raise Conflict("RIDE_ALREADY_ACTIVE", "Terminez ou annulez votre course avant de supprimer le compte")
     # Les courses et ecritures restent (comptabilite, arbitrage) ; les donnees
     # personnelles sont anonymisees.
+    if user.driver:
+        user.driver.online = False
     user.deleted_at = utcnow()
     user.is_active = False
     user.full_name = "Compte supprime"
@@ -43,12 +48,12 @@ def delete_me(user: User = Depends(current_user), db: Session = Depends(get_db))
 
 
 @router.get("/me/notifications", response_model=list[NotificationOut])
-def my_notifications(unread_only: bool = False, limit: int = 50, user: User = Depends(current_user),
+def my_notifications(unread_only: bool = False, limit: int = Query(50, ge=1, le=200), user: User = Depends(current_user),
                      db: Session = Depends(get_db)):
     stmt = select(Notification).where(Notification.user_id == user.id)
     if unread_only:
         stmt = stmt.where(Notification.read_at.is_(None))
-    return db.execute(stmt.order_by(Notification.id.desc()).limit(min(limit, 200))).scalars().all()
+    return db.execute(stmt.order_by(Notification.id.desc()).limit(limit)).scalars().all()
 
 
 @router.post("/me/notifications/read", status_code=204, summary="Marquer toutes les notifications comme lues")

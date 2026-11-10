@@ -8,8 +8,8 @@
  * de la session de l'administrateur connecte.
  */
 const API_URL = process.env.CARLINQ_API_URL ?? "http://localhost:8010";
-const ADMIN_PHONE = process.env.CARLINQ_ADMIN_PHONE ?? "+237600000000";
-const ADMIN_PASSWORD = process.env.CARLINQ_ADMIN_PASSWORD ?? "Carlinq2026!";
+const ADMIN_PHONE = process.env.CARLINQ_ADMIN_PHONE;
+const ADMIN_PASSWORD = process.env.CARLINQ_ADMIN_PASSWORD;
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
@@ -21,6 +21,7 @@ export class ApiError extends Error {
 
 async function adminToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
+  if (!ADMIN_PHONE || !ADMIN_PASSWORD) throw new ApiError(500, "ADMIN_NOT_CONFIGURED", "Compte admin non configure");
   const res = await fetch(`${API_URL}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

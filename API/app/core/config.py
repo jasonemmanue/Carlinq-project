@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,7 +30,18 @@ class Settings(BaseSettings):
     # se calculent a l'heure de Douala.
     TIMEZONE: str = "Africa/Douala"
 
-    CORS_ORIGINS: str = "*"
+    # Liste exacte d'origines web, separees par des virgules. Vide : aucun site tiers
+    # (les apps mobiles et le serveur du backoffice n'utilisent pas CORS).
+    CORS_ORIGINS: str = ""
+
+    # Recharge, retrait et Mobile Money sans operateur reel : developpement et tests
+    # uniquement. Faux par defaut : aucun argent ne peut etre cree sans paiement.
+    PAYMENTS_SIMULATED: bool = False
+
+    # Connexion : blocage apres trop d'echecs (par numero, et par adresse IP).
+    LOGIN_MAX_FAILURES: int = 5
+    LOGIN_LOCK_SECONDS: int = 120
+    LOGIN_MAX_FAILURES_PER_IP: int = 50
 
     @field_validator("DATABASE_URL")
     @classmethod
@@ -40,6 +51,12 @@ class Settings(BaseSettings):
             if v.startswith(prefix):
                 return "postgresql+psycopg2://" + v[len(prefix):]
         return v
+
+    @model_validator(mode="after")
+    def _no_default_secret(self):
+        if self.APP_ENV not in ("development", "test") and self.SECRET_KEY.startswith("change-me"):
+            raise ValueError("SECRET_KEY doit etre defini hors developpement")
+        return self
 
 
 settings = Settings()

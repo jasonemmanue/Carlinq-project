@@ -18,7 +18,7 @@ docker compose up --build -d
 Ports décalés pour cohabiter avec d'autres projets locaux. Au démarrage, le conteneur applique les
 migrations Alembic puis charge les **données de démo** (`SEED_DEMO_DATA=true`, idempotent).
 
-Comptes de démo (mot de passe `Carlinq2026!`) :
+Comptes de démo (mot de passe de développement dans `app/seed.py`, `SEED_DEMO_PASSWORD` ailleurs) :
 
 | Rôle | Téléphone |
 |---|---|

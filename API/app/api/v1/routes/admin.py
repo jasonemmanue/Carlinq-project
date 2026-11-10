@@ -78,7 +78,7 @@ def dashboard(db: Session = Depends(get_db)):
 
 @router.get("/drivers", response_model=list[DriverOut])
 def list_drivers(status: DriverValidation | None = None, role: UserRole | None = None,
-                 limit: int = Query(50, le=200), offset: int = 0, db: Session = Depends(get_db)):
+                 limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0), db: Session = Depends(get_db)):
     stmt = select(Driver).join(User)
     if status:
         stmt = stmt.where(Driver.validation_status == status)
@@ -195,8 +195,8 @@ def review_document(doc_id: int, payload: DocumentReviewIn, admin: User = Depend
 # ------------------------------------------------------------------ utilisateurs
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(role: UserRole | None = None, q: str | None = None, limit: int = Query(50, le=200),
-               offset: int = 0, db: Session = Depends(get_db)):
+def list_users(role: UserRole | None = None, q: str | None = None, limit: int = Query(50, ge=1, le=200),
+               offset: int = Query(0, ge=0), db: Session = Depends(get_db)):
     stmt = select(User).where(User.deleted_at.is_(None))
     if role:
         stmt = stmt.where(User.role == role)
@@ -262,7 +262,7 @@ def adjust_wallet(user_id: int, payload: WalletAdjustIn, admin: User = Depends(a
 # ------------------------------------------------------------------ courses et litiges
 
 @router.get("/rides", response_model=list[RideOut])
-def list_rides(status: RideStatus | None = None, limit: int = Query(50, le=200), offset: int = 0,
+def list_rides(status: RideStatus | None = None, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                db: Session = Depends(get_db)):
     stmt = select(Ride)
     if status:
@@ -566,7 +566,7 @@ def push_campaign(payload: PushIn, admin: User = Depends(admin_only), db: Sessio
 
 
 @router.get("/audit-logs", summary="Journal d'audit")
-def audit_logs(action: str | None = None, entity: str | None = None, limit: int = Query(100, le=500),
+def audit_logs(action: str | None = None, entity: str | None = None, limit: int = Query(100, ge=1, le=500),
                db: Session = Depends(get_db)):
     stmt = select(AuditLog)
     if action:

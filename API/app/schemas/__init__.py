@@ -37,10 +37,17 @@ class SignupIn(BaseModel):
             raise ValueError("Le role admin ne peut pas etre choisi a l'inscription")
         return v
 
+    @field_validator("full_name", "password")
+    @classmethod
+    def _no_nul(cls, v: str):
+        if "\x00" in v:
+            raise ValueError("Caractere interdit")
+        return v
+
 
 class LoginIn(BaseModel):
-    phone: str
-    password: str
+    phone: str = Field(max_length=20, pattern=r"^\+?[0-9 ]+$")
+    password: str = Field(max_length=128)
 
 
 class RefreshIn(BaseModel):
@@ -388,8 +395,8 @@ class AcceptIn(BaseModel):
 
 
 class PauseStartIn(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
 
 
 class TrafficStartIn(BaseModel):
@@ -397,8 +404,8 @@ class TrafficStartIn(BaseModel):
 
 
 class GpsPointIn(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
     speed_kmh: float | None = None
     recorded_at: datetime | None = None
 
@@ -473,8 +480,8 @@ class ZoneIn(BaseModel):
     name: str = Field(max_length=120)
     district: str = Field(max_length=120)
     city: str = "Douala"
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
     capacity: int = Field(6, ge=1, le=100)
     opening_hours: str = "24h/24"
     is_active: bool = True
@@ -497,8 +504,8 @@ class ZoneOut(ORM):
 class RoadIn(BaseModel):
     name: str = Field(max_length=160)
     district: str = Field(max_length=120)
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
     radius_m: int = Field(300, ge=50, le=5000)
     severity_percent: Literal[5, 10, 15]
     validated: bool = True
@@ -516,8 +523,8 @@ class RoadOut(ORM):
 
 
 class RoadReportIn(BaseModel):
-    lat: float
-    lng: float
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
     district: str | None = None
     suggested_percent: Literal[5, 10, 15]
 

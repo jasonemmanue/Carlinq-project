@@ -24,7 +24,7 @@ void main() {
       () => HttpOverrides.runWithHttpOverrides(() async {
             final admin = ApiClient();
             final tokens = await admin.post('/auth/login',
-                {'phone': '+237600000000', 'password': 'Carlinq2026!'});
+                {'phone': '+237600000000', 'password': const String.fromEnvironment('CARLINQ_TEST_PASSWORD')});
             admin.setTokens(tokens['access_token'] as String,
                 tokens['refresh_token'] as String);
 

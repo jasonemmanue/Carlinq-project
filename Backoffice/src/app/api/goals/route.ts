@@ -9,6 +9,11 @@ import { api, ApiError } from "@/lib/api";
  *   { action: "settle", goal_id: 12 }
  */
 export async function POST(req: Request) {
+  // Un autre site ne peut pas declencher un versement avec la session du navigateur.
+  const origin = req.headers.get("origin");
+  if (origin && new URL(origin).host !== req.headers.get("host")) {
+    return NextResponse.json({ error: { code: "FORBIDDEN_ORIGIN", message: "Origine refusee" } }, { status: 403 });
+  }
   const body = await req.json();
   try {
     if (body.action === "close-week") {

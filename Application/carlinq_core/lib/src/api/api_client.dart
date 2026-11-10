@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'lien_api.dart';
+
 /// Erreur renvoyee par l'API Carlinq : `{"error": {"code", "message", "details"}}`.
 class ApiException implements Exception {
   ApiException(this.status, this.code, this.message, [this.details = const {}]);
@@ -20,16 +22,15 @@ class ApiException implements Exception {
 
 /// Client HTTP de l'API FastAPI Carlinq (`/api/v1`).
 ///
-/// URL par defaut : `--dart-define=CARLINQ_API_URL=http://<ip>:8010` au build,
-/// sinon l'adresse de l'emulateur Android vers la machine hote. Modifiable a
-/// l'execution (ecran de connexion, "Serveur API").
+/// URL par defaut : celle de l'API deployee, chiffree dans l'app (`lien_api.dart`).
+/// Developpement : `--dart-define=CARLINQ_API_URL=http://<ip>:8010`.
 class ApiClient {
   ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? defaultBaseUrl;
 
-  static const String defaultBaseUrl = String.fromEnvironment(
-    'CARLINQ_API_URL',
-    defaultValue: 'http://10.0.2.2:8010',
-  );
+  static const String _devUrl = String.fromEnvironment('CARLINQ_API_URL');
+
+  static String get defaultBaseUrl =>
+      _devUrl.isNotEmpty ? _devUrl : lienApiDefinitif();
 
   static const Duration timeout = Duration(seconds: 12);
 
@@ -77,10 +78,10 @@ class ApiClient {
       res = await _raw(method, uri, body).timeout(timeout);
     } on TimeoutException {
       throw ApiException(0, 'NETWORK_TIMEOUT',
-          'Le serveur Carlinq ne repond pas ($baseUrl).');
+          'Le serveur Carlinq ne repond pas.');
     } on SocketException {
       throw ApiException(0, 'NETWORK_UNREACHABLE',
-          'Serveur Carlinq injoignable ($baseUrl).');
+          'Serveur Carlinq injoignable.');
     } on HttpException {
       throw ApiException(0, 'NETWORK_ERROR', 'Erreur reseau.');
     }

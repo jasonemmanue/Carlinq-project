@@ -43,7 +43,7 @@ Adresse du serveur :
 Téléphone réel : même Wi-Fi que le PC qui fait tourner Docker, et port 8010 autorisé dans le pare-feu Windows
 (trafic HTTP en clair autorisé via `usesCleartextTraffic` : à remplacer par HTTPS en production).
 
-Comptes de démo (mot de passe `Carlinq2026!`) : passager `+237690000001`, chauffeur `+237670000001`
+Comptes de démo (mot de passe `<voir API/app/seed.py>`) : passager `+237690000001`, chauffeur `+237670000001`
 (Kevin Kamga, objectif partagé avec Prisca), voir `../API/README.md`.
 
 Les adresses saisies sont converties en coordonnées par un petit référentiel des quartiers de Douala

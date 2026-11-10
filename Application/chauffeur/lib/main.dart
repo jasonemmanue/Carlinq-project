@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +8,10 @@ import 'core/state/app_state.dart';
 import 'features/auth/splash_screen.dart';
 
 void main() {
+  // Aucun journal lisible par adb logcat dans les versions publiees.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
   runApp(const CarlinqChauffeurApp());
 }
 

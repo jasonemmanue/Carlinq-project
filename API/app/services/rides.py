@@ -62,9 +62,19 @@ def assert_participant(ride: Ride, user: User):
 
 # --------------------------------------------------------------------------- creation
 
+def assert_class_for_mode(mode: CarlinqMode, service_class) -> None:
+    if mode == CarlinqMode.flexible and service_class is None:
+        raise Invalid("SERVICE_CLASS_REQUIRED", "Classe requise en Carlinq Flexible")
+
+
 def create_ride(db: Session, passenger: User, data) -> Ride:
     cfg = get_pricing(db)
     mode = data.mode
+    assert_class_for_mode(mode, data.service_class)
+    if data.payment_method in (PaymentMethod.orange_money, PaymentMethod.mtn_momo):
+        wallet.require_payment_provider()
+    # Verrou du passager : deux commandes simultanees ne creent qu'une course.
+    db.execute(select(User.id).where(User.id == passenger.id).with_for_update())
     if mode == CarlinqMode.taxi and data.service_class:
         raise Invalid("CLASS_NOT_APPLICABLE_TO_MODE", "Pas de classe en Carlinq Taxi")
     if mode == CarlinqMode.taxi and data.taxi_zone_id is None:
@@ -150,12 +160,18 @@ def refusal_window(db: Session, driver: Driver, now: datetime | None = None) -> 
 def accept(db: Session, driver: Driver, ride_id: int, eta_seconds: int | None, now: datetime | None = None) -> Ride:
     now = now or utcnow()
     assert_can_drive(db, driver)
+    if not driver.online:
+        raise Conflict("DRIVER_OFFLINE", "Passez en ligne pour accepter une course")
+    # Verrou du chauffeur : deux acceptations simultanees ne donnent qu'une course active.
+    db.execute(select(Driver.id).where(Driver.id == driver.id).with_for_update())
     if db.execute(select(Ride.id).where(Ride.driver_id == driver.id, Ride.status.in_(ACTIVE))).first():
         raise Conflict("DRIVER_HAS_ACTIVE_RIDE", "Terminez votre course en cours avant d'en accepter une autre")
     ride = get_ride(db, ride_id, lock=True)  # verrou : un seul chauffeur peut accepter
     _expect(ride, RideStatus.pending)
     if ride.mode != driver.mode:
         raise Conflict("RIDE_MODE_MISMATCH", "Cette course ne correspond pas a votre mode")
+    if ride.mode == CarlinqMode.flexible and ride.service_class != driver.service_class:
+        raise Conflict("RIDE_CLASS_MISMATCH", "Cette course ne correspond pas a votre classe")
     ride.driver_id = driver.id
     ride.accepted_at = now
     ride.eta_seconds = eta_seconds or 300

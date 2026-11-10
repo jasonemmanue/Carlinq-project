@@ -1,5 +1,5 @@
 """Objectifs hebdomadaires et partage d'objectif entre chauffeurs."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -72,9 +72,9 @@ def current(driver: Driver = Depends(current_driver), db: Session = Depends(get_
 
 
 @router.get("/history", response_model=list[GoalOut])
-def history(limit: int = 12, driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
+def history(limit: int = Query(12, ge=1, le=52), driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
     goals = db.execute(select(WeeklyGoal).where(WeeklyGoal.driver_id == driver.id)
-                       .order_by(WeeklyGoal.week_start.desc()).limit(min(limit, 52))).scalars().all()
+                       .order_by(WeeklyGoal.week_start.desc()).limit(limit)).scalars().all()
     return [goal_out(db, g) for g in goals]
 
 

@@ -1,4 +1,4 @@
-# Carlinq - mise en place du projet Railway (a lancer une fois, relancable sans doublon).
+﻿# Carlinq - mise en place du projet Railway (a lancer une fois, relancable sans doublon).
 #
 # Prerequis : Railway CLI (railway --version), `railway login`, projet cree sur Railway
 # puis `railway link` depuis la racine du monorepo.
@@ -78,6 +78,7 @@ Write-Host "`n== Variables api ==" -ForegroundColor Cyan
 $apiVars = Get-ServiceVars "api"
 $secret = if ($apiVars["SECRET_KEY"]) { $apiVars["SECRET_KEY"] } else { New-Secret 48 }
 $seed = if ($NoSeed) { "false" } else { "true" }
+$demoPassword = if ($apiVars["SEED_DEMO_PASSWORD"]) { $apiVars["SEED_DEMO_PASSWORD"] } else { New-Secret 18 }
 
 # Les references ${{...}} sont resolues par Railway (guillemets simples : pas d'expansion PowerShell).
 Rw variable set --service api --environment $Environment --skip-deploys `
@@ -85,11 +86,13 @@ Rw variable set --service api --environment $Environment --skip-deploys `
     'REDIS_URL=${{Redis.REDIS_URL}}' `
     "SECRET_KEY=$secret" `
     "SEED_DEMO_DATA=$seed" `
+    "SEED_DEMO_PASSWORD=$demoPassword" `
+    "PAYMENTS_SIMULATED=false" `
     "INSTALL_DEV=false" `
     "APP_ENV=staging" `
     "PORT=8000" `
     "TIMEZONE=Africa/Douala" `
-    "CORS_ORIGINS=*" `
+    'CORS_ORIGINS=https://${{backoffice.RAILWAY_PUBLIC_DOMAIN}}' `
     "ACCESS_TOKEN_EXPIRE_MINUTES=60" `
     "REFRESH_TOKEN_EXPIRE_DAYS=30" `
     "CACHE_TTL_SECONDS=300"
@@ -104,7 +107,7 @@ $boPassword = if ($boVars["BACKOFFICE_BASIC_AUTH_PASSWORD"]) { $boVars["BACKOFFI
 Rw variable set --service backoffice --environment $Environment --skip-deploys `
     'CARLINQ_API_URL=https://${{api.RAILWAY_PUBLIC_DOMAIN}}' `
     "CARLINQ_ADMIN_PHONE=+237600000000" `
-    "CARLINQ_ADMIN_PASSWORD=Carlinq2026!" `
+    "CARLINQ_ADMIN_PASSWORD=$demoPassword" `
     "BACKOFFICE_BASIC_AUTH_USER=admin" `
     "BACKOFFICE_BASIC_AUTH_PASSWORD=$boPassword" `
     "NEXT_PUBLIC_APP_ENV=staging" `
@@ -114,6 +117,15 @@ Rw variable set --service backoffice --environment $Environment --skip-deploys `
 Write-Host "`n== Domaines ==" -ForegroundColor Cyan
 Ensure-Domain "api" 8000
 Ensure-Domain "backoffice" 3000
+
+# ------------------------------------------------------------------ stockage
+Write-Host "`n== Volume api (/data) ==" -ForegroundColor Cyan
+$ErrorActionPreference = "Continue"
+# `railway volume` agit sur le service lie au dossier.
+Rw service link api
+$volumes = (& railway volume list 2>$null) -join "`n"
+if ($volumes -notmatch "Attached to: api") { Rw volume add --mount-path /data } else { Write-Host "  volume deja present" }
+$ErrorActionPreference = "Stop"
 
 # ------------------------------------------------------------------ deploiement
 if (-not $NoDeploy) {

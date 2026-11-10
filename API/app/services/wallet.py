@@ -6,8 +6,15 @@ l'ecriture, pour que deux mouvements simultanes ne se perdent pas.
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import Conflict, Invalid
+from app.core.config import settings
+from app.core.errors import Conflict, Invalid, ProviderUnavailable
 from app.models import User, WalletTx
+
+
+def require_payment_provider() -> None:
+    """Aucun mouvement Mobile Money tant qu'aucun operateur ne confirme le paiement (Phase 2, CinetPay)."""
+    if not settings.PAYMENTS_SIMULATED:
+        raise ProviderUnavailable("PAYMENT_PROVIDER_UNAVAILABLE", "Le paiement Mobile Money n'est pas encore disponible")
 
 
 def _lock_user(db: Session, user_id: int) -> User:

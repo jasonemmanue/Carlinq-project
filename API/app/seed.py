@@ -3,16 +3,20 @@
     python -m app.seed
 
 Idempotent : ne fait rien si l'administrateur de demo existe deja.
-Comptes (mot de passe commun : Carlinq2026!) :
+Hors developpement, le mot de passe vient de SEED_DEMO_PASSWORD ; le definir
+le change aussi sur les comptes de demo deja crees.
+Comptes :
     admin            +237600000000
     passagers        +237690000001 .. +237690000003
     chauffeurs       +237670000001 .. +237670000006
 """
+import os
 from datetime import timedelta
 
 from sqlalchemy import select
 
 from app.core.clock import utcnow, week_start
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
@@ -21,7 +25,8 @@ from app.models import (
 )
 from app.services.settings import GoalsConfig, PricingConfig
 
-PASSWORD = "Carlinq2026!"
+PASSWORD = os.environ.get("SEED_DEMO_PASSWORD") or (
+    "Carlinq2026!" if settings.APP_ENV == "development" else "")
 
 PASSENGERS = [
     ("Emmanuel Saka", "+237690000001", 25000),
@@ -65,8 +70,19 @@ ROADS = [
 def run() -> None:
     db = SessionLocal()
     try:
+        if not PASSWORD:
+            print("SEED_DEMO_PASSWORD absent : donnees de demo ignorees.")
+            return
         if db.execute(select(User).where(User.phone == "+237600000000")).scalar_one_or_none():
-            print("Donnees de demo deja presentes.")
+            if os.environ.get("SEED_DEMO_PASSWORD"):
+                phones = ["+237600000000", *(p[1] for p in PASSENGERS), *(d[1] for d in DRIVERS)]
+                new_hash = hash_password(PASSWORD)
+                for user in db.execute(select(User).where(User.phone.in_(phones))).scalars():
+                    user.password_hash = new_hash
+                db.commit()
+                print("Mot de passe des comptes de demo mis a jour.")
+            else:
+                print("Donnees de demo deja presentes.")
             return
         pw = hash_password(PASSWORD)
         now = utcnow()
@@ -121,7 +137,7 @@ def run() -> None:
             db.add(DegradedRoad(name=name, district=district, lat=lat, lng=lng, severity_percent=sev,
                                 radius_m=400, validated=True))
         db.commit()
-        print(f"Donnees de demo creees (mot de passe : {PASSWORD}).")
+        print("Donnees de demo creees.")
     finally:
         db.close()
 

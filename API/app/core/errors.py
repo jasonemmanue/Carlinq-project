@@ -38,8 +38,22 @@ class Invalid(AppError):
     status_code = 422
 
 
+class TooManyAttempts(AppError):
+    status_code = 429
+
+    def __init__(self, retry_after: int):
+        super().__init__("TOO_MANY_ATTEMPTS", f"Trop de tentatives. Reessayez dans {retry_after} secondes.",
+                         retry_after_seconds=retry_after)
+
+
+class ProviderUnavailable(AppError):
+    status_code = 503
+
+
 async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+    retry = exc.details.get("retry_after_seconds")
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": {"code": exc.code, "message": exc.message, "details": exc.details}},
+        headers={"Retry-After": str(retry)} if retry else None,
     )

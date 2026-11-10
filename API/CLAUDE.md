@@ -37,6 +37,12 @@ Next.js (`/Backoffice`). Voir `README.md` pour les routes, les comptes de démo 
 - Le cache Redis n'est jamais source de vérité : toute écriture sur une donnée cachée doit appeler
   `cache.invalidate_on_commit(db, <cle>)`.
 
+- Mobile Money : `PAYMENTS_SIMULATED=false` par défaut (recharge, retrait, Premium et course Mobile Money renvoient 503). `true` seulement en local et en test.
+- Connexion : 5 échecs par numéro = 2 min de blocage (`app/core/ratelimit.py`).
+- Les erreurs 422 ne renvoient jamais la valeur saisie.
+
+- Fichiers envoyés : `services/storage.py`, sur le volume Railway (`RAILWAY_VOLUME_MOUNT_PATH`) ; type vérifié sur les octets, lecture contrôlée par `GET /files/...`.
+
 ## Pièges
 
 - Modifier un modèle → `alembic revision --autogenerate` (dans le conteneur avec le dossier `alembic/versions`

@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.schemas import (
 )
 from app.services import goals as goals_svc
 from app.services import rides as rides_svc
+from app.services import storage
 from app.services import wallet
 from app.services.pricing import haversine_km
 from app.services.settings import get_pricing
@@ -99,9 +100,9 @@ def refusal_window(driver: Driver = Depends(current_driver), db: Session = Depen
 
 
 @router.get("/me/points", response_model=list[PointEventOut])
-def points_history(limit: int = 50, driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
+def points_history(limit: int = Query(50, ge=1, le=200), driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
     return db.execute(select(PointEvent).where(PointEvent.driver_id == driver.id)
-                      .order_by(PointEvent.id.desc()).limit(min(limit, 200))).scalars().all()
+                      .order_by(PointEvent.id.desc()).limit(limit)).scalars().all()
 
 
 # ------------------------------------------------------------------ documents
@@ -109,6 +110,18 @@ def points_history(limit: int = 50, driver: Driver = Depends(current_driver), db
 @router.post("/me/documents", response_model=DocumentOut, status_code=201)
 def upload_document(payload: DocumentIn, driver: Driver = Depends(current_driver), db: Session = Depends(get_db)):
     doc = DriverDocument(driver_id=driver.id, **payload.model_dump())
+    db.add(doc)
+    db.commit()
+    return doc
+
+
+@router.post("/me/documents/upload", response_model=DocumentOut, status_code=201,
+             summary="Envoyer un document (JPEG, PNG, WebP ou PDF, 8 Mo maximum)")
+def upload_document_file(doc_type: str = Form(pattern="^(cni|permis|carte_grise|assurance|autre)$"),
+                         file: UploadFile = File(...), driver: Driver = Depends(current_driver),
+                         db: Session = Depends(get_db)):
+    key = storage.save("documents", driver.id, file, allow_pdf=True)
+    doc = DriverDocument(driver_id=driver.id, doc_type=doc_type, file_url=storage.url_for(key))
     db.add(doc)
     db.commit()
     return doc
@@ -165,6 +178,7 @@ def subscribe_premium(payload: PremiumIn, driver: Driver = Depends(current_drive
     if payload.channel == "wallet":
         wallet.post(db, driver.user_id, -price, "premium", label=f"Pack Premium {payload.months} mois")
     else:
+        wallet.require_payment_provider()
         # Paiement Mobile Money : l'encaissement est confirme par l'operateur
         # (integration CinetPay en Phase 2) ; on trace le paiement recu.
         wallet.post(db, driver.user_id, price, "topup", label="Paiement Pack Premium", channel=payload.channel)

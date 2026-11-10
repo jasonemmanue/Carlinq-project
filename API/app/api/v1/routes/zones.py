@@ -44,7 +44,7 @@ def list_zones(district: str | None = None, lat: float | None = None, lng: float
                _: User = Depends(current_user), db: Session = Depends(get_db)):
     zones = [z for z in active_zones(db) if district is None or z["district"] == district]
     items = _with_availability(db, zones, lat, lng)
-    if lat is not None:
+    if lat is not None and lng is not None:
         items.sort(key=lambda z: z.distance_m)
     return items
 

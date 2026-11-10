@@ -67,4 +67,5 @@ Ne jamais les refusionner.
 - Tout écran avec `Timer.periodic` (suivi de course, navigation, commande) doit l'annuler dans `dispose()`.
 - `flutter_localizations` est requis pour la locale `fr` (sinon exception MaterialLocalizations).
 - `flutter test` remplace le client HTTP : les tests d'API (`test/api_e2e_test.dart`) exécutent leur corps dans `HttpOverrides.runWithHttpOverrides(..., _RealHttp())`.
-- Release Android : la permission INTERNET et `usesCleartextTraffic` sont dans `src/main/AndroidManifest.xml` (les variantes debug/profile ne suffisent pas).
+- Release Android : HTTPS seul et `allowBackup=false` dans `src/main/AndroidManifest.xml` ; le HTTP local n'est autorisé qu'en debug. Sans `android/key.properties`, une release locale échoue.
+- URL de l'API chiffrée dans `carlinq_core/lib/src/api/lien_api.dart` ; développement : `--dart-define=CARLINQ_API_URL=http://<ip>:8010`.

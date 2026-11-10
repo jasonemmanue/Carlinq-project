@@ -7,6 +7,7 @@ puis chaque test repart de tables vides.
 """
 import itertools
 import os
+import tempfile
 
 import pytest
 from alembic import command
@@ -15,11 +16,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+os.environ["PAYMENTS_SIMULATED"] = "true"
+os.environ["STORAGE_DIR"] = tempfile.mkdtemp(prefix="carlinq-tests-")
+
 TEST_URL = os.environ.get("TEST_DATABASE_URL")
 if not TEST_URL:
     pytest.exit("TEST_DATABASE_URL manquant (lancer via docker compose run --rm api pytest)", 2)
 
-from app.core import cache  # noqa: E402
+from app.core import cache, ratelimit  # noqa: E402
 from app.core.config import settings as app_settings  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 
@@ -57,6 +61,7 @@ def _clean():
         )).scalars().all()
         conn.execute(text(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE"))
     cache.flush_all()
+    ratelimit.clear_local()
     yield
 
 
@@ -167,6 +172,7 @@ def make_driver(client, db):
         if approved:
             driver = db.get(Driver, actor.driver_id)
             driver.validation_status = DriverValidation.approved
+            driver.online = True
             db.commit()
         return actor
     return _make

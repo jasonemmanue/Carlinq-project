@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:carlinq_core/carlinq_core.dart';
@@ -49,11 +50,12 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         title: const Text('Connexion'),
         actions: [
-          IconButton(
-            tooltip: 'Serveur API',
-            icon: const Icon(Icons.dns_outlined),
-            onPressed: () => showServerSettings(context, app.api),
-          ),
+          if (!kReleaseMode)
+            IconButton(
+              tooltip: 'Serveur API',
+              icon: const Icon(Icons.dns_outlined),
+              onPressed: () => showServerSettings(context, app.api),
+            ),
         ],
       ),
       body: SafeArea(
@@ -136,9 +138,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 label: const Text('Explorer en mode demo'),
               ),
               const SizedBox(height: 16),
-              Text('Serveur : ${app.api.baseUrl}',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.textSecondary)),
+              if (!kReleaseMode)
+                Text('Serveur : ${app.api.baseUrl}',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.textSecondary)),
             ],
           ),
         ),
